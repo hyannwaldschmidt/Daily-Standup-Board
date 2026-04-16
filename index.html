@@ -496,12 +496,41 @@ async function loadFromSupabase(){
 /* ══════════════════════════════════════════
    TAB SWITCHING
 ══════════════════════════════════════════ */
+async function refreshTab(tab){
+  try{
+    if(tab==='standup'){
+      const[cR,dR,pR]=await Promise.all([
+        db.from('cards').select('*'),
+        db.from('deliverables').select('*').order('idx'),
+        db.from('person_colors').select('*')
+      ]);
+      if(!cR.error&&cR.data)cards=cR.data;
+      if(!dR.error&&dR.data&&dR.data.length===5)deliverables=dR.data.map(({idx,...r})=>r);
+      if(!pR.error&&pR.data){pR.data.forEach(c=>{personColors[c.person]={bg:c.bg,txt:c.txt};});colorIdx=Object.keys(personColors).length;}
+      saveAll();renderDeliverables();renderBoard();renderFilterBar();
+    }else if(tab==='meetings'){
+      const mR=await db.from('meetings').select('*');
+      if(!mR.error&&mR.data)meetings=mR.data;
+      saveAll();renderCalendar();
+    }else if(tab==='people'){
+      const[iR,pR]=await Promise.all([
+        db.from('interviewed').select('*'),
+        db.from('person_colors').select('*')
+      ]);
+      if(!iR.error&&iR.data)interviewed=iR.data;
+      if(!pR.error&&pR.data){pR.data.forEach(c=>{personColors[c.person]={bg:c.bg,txt:c.txt};});colorIdx=Object.keys(personColors).length;}
+      saveAll();renderPeople(document.getElementById('peopleSearch').value);
+    }
+  }catch(e){console.warn('refreshTab error:',e);}
+}
+
 document.querySelectorAll('.tab-btn').forEach(btn=>{
-  btn.addEventListener('click',()=>{
+  btn.addEventListener('click',async()=>{
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+    await refreshTab(btn.dataset.tab);
   });
 });
 
