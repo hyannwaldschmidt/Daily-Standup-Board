@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Gold Fields — WiredUp Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --teal:#0F6E56; --teal-mid:#1D9E75; --teal-light:#E1F5EE;
@@ -242,10 +243,37 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--navy);min
 .lightbox.open{display:flex;}
 .lightbox img{max-width:90vw;max-height:88vh;border-radius:8px;object-fit:contain;}
 
+/* ── Auth gate ── */
+#authGate{position:fixed;inset:0;background:var(--navy);z-index:1000;display:flex;align-items:center;justify-content:center;}
+#authGate.hidden{display:none;}
+.auth-card{background:#fff;border-radius:16px;padding:2.75rem 2.25rem 2.25rem;width:380px;max-width:92vw;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.45);}
+.auth-logo-wrap{width:58px;height:58px;border-radius:50%;background:var(--teal-mid);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#fff;margin:0 auto .9rem;}
+.auth-title{font-size:17px;font-weight:700;color:var(--navy);margin-bottom:.25rem;}
+.auth-sub{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:1.75rem;letter-spacing:.04em;}
+.auth-input{width:100%;padding:.65rem .85rem;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:'DM Sans',sans-serif;color:var(--navy);background:var(--bg);outline:none;text-align:center;letter-spacing:.12em;}
+.auth-input:focus{border-color:var(--teal-mid);box-shadow:0 0 0 3px rgba(29,158,117,.12);}
+.auth-btn{width:100%;margin-top:.75rem;padding:.72rem;background:var(--teal-mid);color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background .15s;}
+.auth-btn:hover{background:var(--teal);}
+.auth-error{margin-top:.65rem;font-size:12px;color:var(--danger);display:none;}
+.auth-hint{margin-top:1.5rem;font-size:11px;color:#cbd5e0;}
+
 @media print{.header,.tab-bar,.add-btn,.add-person-btn,.card-actions,.pc-btn,.modal-overlay,.filter-bar{display:none!important;}.tab-panel{display:block!important;}}
 </style>
 </head>
 <body>
+
+<!-- Auth Gate -->
+<div id="authGate">
+  <div class="auth-card">
+    <div class="auth-logo-wrap">GF</div>
+    <div class="auth-title">Gold Fields — WiredUp Pilot</div>
+    <div class="auth-sub">Value Driver Tree Diagnostic Engine</div>
+    <input class="auth-input" type="password" id="authInput" placeholder="Enter password" autocomplete="off"/>
+    <button class="auth-btn" id="authBtn">Access Board →</button>
+    <div class="auth-error" id="authError">Incorrect password. Please try again.</div>
+    <div class="auth-hint">Partners in Performance · Restricted access</div>
+  </div>
+</div>
 
 <!-- Header -->
 <div class="header">
@@ -387,7 +415,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--navy);min
 /* ══════════════════════════════════════════
    SHARED CONSTANTS & UTILITIES
 ══════════════════════════════════════════ */
-const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+const SUPABASE_URL='https://ivppvwnkxsgcwbcfdalr.supabase.co';
+const SUPABASE_KEY='sb_publishable_Sp0RuWToQJ-zznyjYR7dRg_qGuKYKzE';
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const DAYS =['Monday','Tuesday','Wednesday','Thursday','Friday'];
 const ROWS = [
   {id:'vdt',label:'VDTs',cls:'vdt'},
   {id:'int',label:'Integration & KPI',cls:'int'},
@@ -430,8 +462,35 @@ function saveAll(){
   }catch(e){}
 }
 function getColor(name){
-  if(!personColors[name]){personColors[name]=COLORS[colorIdx%COLORS.length];colorIdx++;saveAll();}
+  if(!personColors[name]){personColors[name]=COLORS[colorIdx%COLORS.length];colorIdx++;saveAll();sbUpsertColor(name,personColors[name]);}
   return personColors[name];
+}
+
+/* ── Supabase helpers ── */
+function sbUpsertCard(c){db.from('cards').upsert(c).then(({error})=>{if(error)console.warn('sbCard',error);});}
+function sbDeleteCard(id){db.from('cards').delete().eq('id',id).then(({error})=>{if(error)console.warn('sbDelCard',error);});}
+function sbUpsertDelivs(){db.from('deliverables').upsert(deliverables.map((d,i)=>({idx:i,...d}))).then(({error})=>{if(error)console.warn('sbDeliv',error);});}
+function sbUpsertMeeting(m){db.from('meetings').upsert(m).then(({error})=>{if(error)console.warn('sbMtg',error);});}
+function sbDeleteMeeting(id){db.from('meetings').delete().eq('id',id).then(({error})=>{if(error)console.warn('sbDelMtg',error);});}
+function sbUpsertPerson(p){db.from('interviewed').upsert(p).then(({error})=>{if(error)console.warn('sbPerson',error);});}
+function sbDeletePerson(id){db.from('interviewed').delete().eq('id',id).then(({error})=>{if(error)console.warn('sbDelPerson',error);});}
+function sbUpsertColor(name,col){db.from('person_colors').upsert({person:name,...col}).then(({error})=>{if(error)console.warn('sbColor',error);});}
+async function loadFromSupabase(){
+  try{
+    const[cR,dR,mR,iR,pR]=await Promise.all([
+      db.from('cards').select('*'),
+      db.from('deliverables').select('*').order('idx'),
+      db.from('meetings').select('*'),
+      db.from('interviewed').select('*'),
+      db.from('person_colors').select('*')
+    ]);
+    if(!cR.error&&cR.data){if(cR.data.length)cards=cR.data;else if(cards.length)db.from('cards').upsert(cards);}
+    if(!dR.error&&dR.data){if(dR.data.length===5)deliverables=dR.data.map(({idx,...r})=>r);else db.from('deliverables').upsert(deliverables.map((d,i)=>({idx:i,...d})));}
+    if(!mR.error&&mR.data){if(mR.data.length)meetings=mR.data;else if(meetings.length)db.from('meetings').upsert(meetings);}
+    if(!iR.error&&iR.data){if(iR.data.length)interviewed=iR.data;else if(interviewed.length)db.from('interviewed').upsert(interviewed);}
+    if(!pR.error&&pR.data){if(pR.data.length){pR.data.forEach(c=>{personColors[c.person]={bg:c.bg,txt:c.txt};});colorIdx=Object.keys(personColors).length;}else{const cr=Object.entries(personColors).map(([person,col])=>({person,...col}));if(cr.length)db.from('person_colors').upsert(cr);}}
+    saveAll();
+  }catch(e){console.warn('Supabase load error:',e);}
 }
 
 /* ══════════════════════════════════════════
@@ -475,9 +534,9 @@ function renderDeliverables(){
       </div>`;
     grid.appendChild(box);
   });
-  grid.querySelectorAll('textarea[data-di]').forEach(el=>el.addEventListener('input',e=>{deliverables[+e.target.dataset.di].text=e.target.value;saveAll();}));
-  grid.querySelectorAll('select[data-day]').forEach(el=>el.addEventListener('change',e=>{deliverables[+e.target.dataset.day].day=e.target.value;saveAll();}));
-  grid.querySelectorAll('input[data-owner]').forEach(el=>el.addEventListener('input',e=>{deliverables[+e.target.dataset.owner].owner=e.target.value;saveAll();}));
+  grid.querySelectorAll('textarea[data-di]').forEach(el=>el.addEventListener('input',e=>{deliverables[+e.target.dataset.di].text=e.target.value;saveAll();sbUpsertDelivs();}));
+  grid.querySelectorAll('select[data-day]').forEach(el=>el.addEventListener('change',e=>{deliverables[+e.target.dataset.day].day=e.target.value;saveAll();sbUpsertDelivs();}));
+  grid.querySelectorAll('input[data-owner]').forEach(el=>el.addEventListener('input',e=>{deliverables[+e.target.dataset.owner].owner=e.target.value;saveAll();sbUpsertDelivs();}));
 }
 
 /* Filter */
@@ -552,7 +611,7 @@ function onBoardClick(e){
   const card=btn.closest('.task-card');
   if(action==='done'){
     const c=cards.find(x=>x.id===id);if(!c)return;
-    c.done=!c.done;saveAll();
+    c.done=!c.done;saveAll();sbUpsertCard(c);
     const pill=card.querySelector('.done-pill');
     const circle=card.querySelector('.pill-circle');
     const label=card.querySelector('.pill-label');
@@ -571,11 +630,11 @@ function onBoardClick(e){
     const np=card.querySelector('.edit-person').value.trim();
     const nd=card.querySelector('.edit-desc').value.trim();
     if(!np||!nd){alert('Both fields are required.');return;}
-    if(np!==c.person)getColor(np);c.person=np;c.desc=nd;saveAll();
+    if(np!==c.person)getColor(np);c.person=np;c.desc=nd;saveAll();sbUpsertCard(c);
     card.replaceWith(makeCard(c));renderFilterBar();return;
   }
   if(action==='cancel'){card.classList.remove('editing');card.draggable=true;return;}
-  if(action==='del'){cards=cards.filter(x=>x.id!==id);saveAll();renderBoard();renderFilterBar();}
+  if(action==='del'){sbDeleteCard(id);cards=cards.filter(x=>x.id!==id);saveAll();renderBoard();renderFilterBar();}
 }
 
 function renderBoard(){
@@ -601,7 +660,7 @@ function renderBoard(){
       cell.addEventListener('dragleave',()=>cell.classList.remove('drag-over'));
       cell.addEventListener('drop',e=>{
         e.preventDefault();cell.classList.remove('drag-over');
-        if(dragCard&&(dragCard.day!==day||dragCard.row!==row.id)){dragCard.day=day;dragCard.row=row.id;saveAll();renderBoard();renderFilterBar();}
+        if(dragCard&&(dragCard.day!==day||dragCard.row!==row.id)){dragCard.day=day;dragCard.row=row.id;sbUpsertCard(dragCard);saveAll();renderBoard();renderFilterBar();}
       });
       board.appendChild(cell);
     });
@@ -627,8 +686,8 @@ function showTaskForm(cell,addBtn,day,rowId){
     const person=document.getElementById(`fp${id}`).value.trim();
     const desc=document.getElementById(`fd${id}`).value.trim();
     if(!person||!desc){alert('Please fill in both fields.');return;}
-    getColor(person);cards.push({id:uid(),person,desc,day,row:rowId,done:false});
-    saveAll();renderBoard();renderFilterBar();
+    getColor(person);const newCard={id:uid(),person,desc,day,row:rowId,done:false};cards.push(newCard);
+    sbUpsertCard(newCard);saveAll();renderBoard();renderFilterBar();
   });
   document.getElementById(`fc${id}`).addEventListener('click',()=>{form.remove();addBtn.style.display='';});
 }
@@ -686,14 +745,15 @@ function openMeetingModal(day,slot,existing){
     if(!name){alert('Please enter a meeting name.');return;}
     if(existing){
       const m=meetings.find(x=>x.id===existing.id);
-      if(m){m.name=name;m.topics=document.getElementById('mTopics').value.trim();m.attendees=document.getElementById('mAttendees').value.trim();m.location=document.getElementById('mLocation').value.trim();}
+      if(m){m.name=name;m.topics=document.getElementById('mTopics').value.trim();m.attendees=document.getElementById('mAttendees').value.trim();m.location=document.getElementById('mLocation').value.trim();sbUpsertMeeting(m);}
     }else{
-      meetings.push({id:uid(),day,slot,name,topics:document.getElementById('mTopics').value.trim(),attendees:document.getElementById('mAttendees').value.trim(),location:document.getElementById('mLocation').value.trim()});
+      const newM={id:uid(),day,slot,name,topics:document.getElementById('mTopics').value.trim(),attendees:document.getElementById('mAttendees').value.trim(),location:document.getElementById('mLocation').value.trim()};
+      meetings.push(newM);sbUpsertMeeting(newM);
     }
     saveAll();closeMeetingModal();renderCalendar();
   };
   document.getElementById('mDelBtn').onclick=()=>{
-    meetings=meetings.filter(x=>x.id!==existing.id);saveAll();closeMeetingModal();renderCalendar();
+    sbDeleteMeeting(existing.id);meetings=meetings.filter(x=>x.id!==existing.id);saveAll();closeMeetingModal();renderCalendar();
   };
   document.getElementById('meetingModal').classList.add('open');
   document.getElementById('mName').focus();
@@ -883,14 +943,15 @@ document.getElementById('pmSaveBtn').addEventListener('click',()=>{
     links:[...modalLinks]
   };
   if(editingPersonId){
-    const p=interviewed.find(x=>x.id===editingPersonId);if(p)Object.assign(p,data);
+    const p=interviewed.find(x=>x.id===editingPersonId);if(p){Object.assign(p,data);sbUpsertPerson(p);}
   }else{
-    interviewed.push({id:uid(),...data});getColor(name);
+    const newP={id:uid(),...data};interviewed.push(newP);getColor(name);sbUpsertPerson(newP);
   }
   saveAll();closePersonModal();renderPeople(document.getElementById('peopleSearch').value);
 });
 document.getElementById('pmDelBtn').addEventListener('click',()=>{
   if(!confirm('Delete this interview record?'))return;
+  sbDeletePerson(editingPersonId);
   interviewed=interviewed.filter(x=>x.id!==editingPersonId);
   saveAll();closePersonModal();renderPeople(document.getElementById('peopleSearch').value);
 });
@@ -906,11 +967,40 @@ weekInput.addEventListener('change',e=>{try{localStorage.setItem('gf6_week',e.ta
 /* ══════════════════════════════════════════
    INIT
 ══════════════════════════════════════════ */
-renderDeliverables();
-renderBoard();
-renderFilterBar();
-renderCalendar();
-renderPeople();
+/* ══════════════════════════════════════════
+   AUTH GATE
+══════════════════════════════════════════ */
+function initApp(){
+  loadFromSupabase().then(()=>{
+    renderDeliverables();
+    renderBoard();
+    renderFilterBar();
+    renderCalendar();
+    renderPeople();
+  });
+}
+(function(){
+  const AUTH_KEY='gf_board_auth';
+  const CORRECT='GoldFieldsACN';
+  if(localStorage.getItem(AUTH_KEY)==='ok'){
+    document.getElementById('authGate').classList.add('hidden');
+    initApp();return;
+  }
+  function checkPwd(){
+    const val=document.getElementById('authInput').value;
+    if(val===CORRECT){
+      localStorage.setItem(AUTH_KEY,'ok');
+      document.getElementById('authGate').classList.add('hidden');
+      initApp();
+    }else{
+      document.getElementById('authError').style.display='block';
+      document.getElementById('authInput').value='';
+      document.getElementById('authInput').focus();
+    }
+  }
+  document.getElementById('authBtn').addEventListener('click',checkPwd);
+  document.getElementById('authInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkPwd();});
+})();
 </script>
 </body>
 </html>
